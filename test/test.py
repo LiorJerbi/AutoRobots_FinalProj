@@ -8,6 +8,11 @@ import navpy
 from gnssutils import ephemeris_manager
 
 
+LIGHTSPEED = 2.99792458e8
+
+def convertXYZtoLLA(val):
+    return navpy.ecef2lla(val)
+
 def ParseToCSV():
     # path = input('pls enter dir path: \n')
     # dirname = os.path.basename(path)
@@ -96,7 +101,6 @@ def ParseToCSV():
 
     # Calculate pseudorange in seconds
     WEEKSEC = 604800
-    LIGHTSPEED = 2.99792458e8
     measurements['tRxGnssNanos'] = measurements['TimeNanos'] + measurements['TimeOffsetNanos'] - (measurements['FullBiasNanos'].iloc[0] + measurements['BiasNanos'].iloc[0])
     measurements['GpsWeekNumber'] = np.floor(1e-9 * measurements['tRxGnssNanos'] / WEEKSEC)
     measurements['tRxSeconds'] = 1e-9*measurements['tRxGnssNanos'] - WEEKSEC * measurements['GpsWeekNumber']
@@ -181,9 +185,11 @@ def ParseToCSV():
         return sv_position
 
     sv_position = calculate_satellite_position(ephemeris, one_epoch['tTxSeconds'])
+
     Yco = sv_position['y_k'].tolist()
     Xco = sv_position['x_k'].tolist()
     Zco = sv_position['z_k'].tolist()
+
 
    # Calculate CN0 values
     epoch = 0
@@ -217,5 +223,91 @@ def ParseToCSV():
 
         # Write the data
         writer.writerows(data)
+    return one_epoch['PrM'], sv_position['delT_sv']
 
-ParseToCSV()
+
+prm, delT = ParseToCSV()
+
+parent_directory = os.path.split(os.getcwd())[0]
+input_fpath = os.path.join(parent_directory, "test1.csv")
+
+# Initialize lists to store extracted values
+sat_x_column = []
+sat_y_column = []
+sat_z_column = []
+pseudorange_column = []
+cn0_column = []
+
+# Open the CSV file
+with open(input_fpath, newline='') as csvfile:
+    # Create a CSV reader object
+    reader = csv.reader(csvfile)
+
+    # Read the first row to get the column headers
+    headers = next(reader)
+
+    # Find the indices of the required columns
+    sat_x_index = headers.index('Sat.X')
+    sat_y_index = headers.index('Sat.Y')
+    sat_z_index = headers.index('Sat.Z')
+    pseudorange_index = headers.index('Pseudo-Range')
+    cn0_index = headers.index('CN0')
+
+
+    # Iterate through each row and extract the values of the required columns
+    for row in reader:
+        sat_x_column.append(float(row[sat_x_index]))
+        sat_y_column.append(float(row[sat_y_index]))
+        sat_z_column.append(float(row[sat_z_index]))
+        pseudorange_column.append(float(row[pseudorange_index]))
+        cn0_column.append(float(row[cn0_index]))
+
+# Convert lists to numpy arrays for easier manipulation
+sat_x_array = np.array(sat_x_column)
+sat_y_array = np.array(sat_y_column)
+sat_z_array = np.array(sat_z_column)
+pseudorange_array = np.array(pseudorange_column)
+weights = np.array(cn0_column)
+# Combine satellite positions into a single variable xs
+xs = np.column_stack((sat_x_array, sat_y_array, sat_z_array))
+
+#initial guesses of receiver clock bias and position
+b0 = 0
+x0 = np.array([0, 0, 0])
+pr = prm + LIGHTSPEED * delT
+pr = pr.to_numpy()
+
+
+
+def weighted_least_squares(xs, measured_pseudorange, x0, b0, weights):
+    dx = 100 * np.ones(3)
+    b = b0
+    G = np.ones((measured_pseudorange.size, 4))
+    iterations = 0
+
+    while np.linalg.norm(dx) > 1e-3:
+        r = np.linalg.norm(xs - x0, axis=1)
+        phat = r + b0
+        deltaP = measured_pseudorange - phat
+
+        # Modify residuals using weights
+        weighted_residuals = deltaP / np.sqrt(weights)
+
+        # Modify G matrix using weights
+        weighted_G = -(xs - x0) / r[:, None] / np.sqrt(weights[:, None])
+        G[:, 0:3] = weighted_G
+
+        # Solve weighted least squares
+        sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ weighted_residuals
+
+        dx = sol[0:3]
+        db = sol[3]
+        x0 = x0 + dx
+        b0 = b0 + db
+    norm_dp = np.linalg.norm(measured_pseudorange - phat)
+    return x0, b0, norm_dp
+
+x, b, dp = weighted_least_squares(xs, pr, x0, b0, weights)
+print(convertXYZtoLLA(x))
+print(b/LIGHTSPEED)
+print(dp)
