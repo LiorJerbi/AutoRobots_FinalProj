@@ -251,9 +251,6 @@ def least_squares(xs, measured_pseudorange, x0, b0, weights):
     return x0, b0, norm_dp
 
 
-
-
-
 x, b, dp = least_squares(xs, pr, x0, b0, weights)
 print(navpy.ecef2lla(x))
 print(b/LIGHTSPEED)
@@ -273,7 +270,7 @@ for epoch in measurements['Epoch'].unique():
         pr = one_epoch['PrM'] + LIGHTSPEED * sv_position['delT_sv']
         pr = pr.to_numpy()
 
-        x, b, dp = least_squares(xs, pr, x, b)
+        x, b, dp = least_squares(xs, pr, x, b, weights)
         ecef_list.append(x)
 
 # Perform coordinate transformations using the Navpy library
