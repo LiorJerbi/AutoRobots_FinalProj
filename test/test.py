@@ -10,6 +10,83 @@ from gnssutils import ephemeris_manager
 
 LIGHTSPEED = 2.99792458e8
 
+def weighted_least_squares(xs, measured_pseudorange, x0, b0, weights):
+    dx = 100 * np.ones(3)
+    b = b0
+    G = np.ones((measured_pseudorange.size, 4))
+    iterations = 0
+
+    while np.linalg.norm(dx) > 1e-3:
+        r = np.linalg.norm(xs - x0, axis=1)
+        phat = r + b0
+        deltaP = measured_pseudorange - phat
+
+        # Modify residuals using weights
+        weighted_residuals = deltaP / np.sqrt(weights)
+
+        # Modify G matrix using weights
+        weighted_G = -(xs - x0) / r[:, None] / np.sqrt(weights[:, None])
+        G[:, 0:3] = weighted_G
+
+        # Solve weighted least squares
+        sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ weighted_residuals
+        dx = sol[0:3]
+        db = sol[3]
+        x0 = x0 + dx
+        b0 = b0 + db
+    norm_dp = np.linalg.norm(measured_pseudorange - phat)
+    return x0, b0, norm_dp
+def least_squares(xs, measured_pseudorange, x0, b0):
+    dx = 100*np.ones(3)
+    b = b0
+    # set up the G matrix with the right dimensions. We will later replace the first 3 columns
+    # note that b here is the clock bias in meters equivalent, so the actual clock bias is b/LIGHTSPEED
+    G = np.ones((measured_pseudorange.size, 4))
+    iterations = 0
+    while np.linalg.norm(dx) > 1e-3:
+        # Eq. (2):
+        r = np.linalg.norm(xs - x0, axis=1)
+        # Eq. (1):
+        phat = r + b0
+        # Eq. (3):
+        deltaP = measured_pseudorange - phat
+        G[:, 0:3] = -(xs - x0) / r[:, None]
+        # Eq. (4):
+        sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ deltaP
+        # Eq. (5):
+        dx = sol[0:3]
+        db = sol[3]
+        x0 = x0 + dx
+        b0 = b0 + db
+    norm_dp = np.linalg.norm(deltaP)
+    return x0, b0, norm_dp
+
+
+def positioning_algorithm(csv_file):
+    # Read CSV file
+    df = pd.read_csv(csv_file)
+    data = []
+    df_times = df['GPS time'].unique()
+    for time in df_times:
+        # Extract rows with given GPS time
+        df_gps_time = df[df['GPS time']== time]
+        # Sort data based on 'SatPRN (ID)' column
+        df_gps_time_sorted = df_gps_time.sort_values(by='SatPRN (ID)')
+
+        # Extract relevant columns for the algorithm
+        xs = df_gps_time_sorted[['Sat.X', 'Sat.Y', 'Sat.Z']].values
+        measured_pseudorange = df_gps_time_sorted['Pseudo-Range'].values
+        x0 = np.array([0, 0, 0])  # Initial guess for position
+        b0 = 0  # Initial guess for bias
+        weights = df_gps_time_sorted['CN0'].values
+
+        # Apply weighted least squares algorithm
+        x_estimate, bias_estimate, norm_dp = weighted_least_squares(xs, measured_pseudorange, x0, b0,weights)
+        data.append([time,x_estimate[0],x_estimate[1],x_estimate[2]])
+    df_ans = pd.DataFrame(data,columns=["GPS_Time","Pos_X","Pos_Y","Pos_Z"])
+    print(df_ans)
+    return df_ans
+
 def convertXYZtoLLA(val):
     return navpy.ecef2lla(val)
 
@@ -114,11 +191,11 @@ def ParseToCSV():
     measurements['PrSigmaM'] = LIGHTSPEED * 1e-9 * measurements['ReceivedSvTimeUncertaintyNanos']
 
     # Extract pseudo-range calculations
-    pseudo_range = measurements['PrM'].tolist()
+    # pseudo_range = measurements['PrM'].tolist()
     # print(pseudo_range)
     manager = ephemeris_manager.EphemerisManager(ephemeris_data_directory)
     # Calculate satellite Y,X,Z coordinates
-    # print(measurements['Epoch'].unique())
+    # loop to go through each timezone of satellites
     prInd=0
     for i in range(len(measurements['Epoch'].unique())):
         epoch = i
@@ -210,13 +287,13 @@ def ParseToCSV():
 
         CN0 = one_epoch['Cn0DbHz'].tolist()
         doppler = measurements['PseudorangeRateMetersPerSecond'].tolist()
-
-
+        # print(one_epoch['PrM'])
+        pseudo_range = (one_epoch['PrM'] + LIGHTSPEED*sv_position['delT_sv']).to_numpy()
     # saving all the above data into csv file
     #     data = []
         for i in range(len(Yco)):
             gpsTime[i] = timestamp
-            row = [gpsTime[i], satPRN[i], Xco[i], Yco[i], Zco[i], pseudo_range[prInd], CN0[i], doppler[prInd]]
+            row = [gpsTime[i], satPRN[i], Xco[i], Yco[i], Zco[i], pseudo_range[i], CN0[i], doppler[prInd]]
             data.append(row)
             prInd+=1
 
@@ -238,83 +315,60 @@ prm, delT = ParseToCSV()
 parent_directory = os.path.split(os.getcwd())[0]
 input_fpath = os.path.join(parent_directory, "test1.csv")
 
-# Initialize lists to store extracted values
-sat_x_column = []
-sat_y_column = []
-sat_z_column = []
-pseudorange_column = []
-cn0_column = []
 
 # Open the CSV file
-with open(input_fpath, newline='') as csvfile:
+csvfile = open(input_fpath, newline='')
     # Create a CSV reader object
-    reader = csv.reader(csvfile)
+    # reader = csv.reader(csvfile)
+#
+#     # Read the first row to get the column headers
+#     headers = next(reader)
+#
+#     # Find the indices of the required columns
+#     gps_time_index = headers.index("GPS time")
+#     sat_x_index = headers.index('Sat.X')
+#     sat_y_index = headers.index('Sat.Y')
+#     sat_z_index = headers.index('Sat.Z')
+#     pseudorange_index = headers.index('Pseudo-Range')
+#     cn0_index = headers.index('CN0')
+#
+#
+#
+#     # Iterate through each row and extract the values of the required columns
+#     for row in reader:
+#         gps_time_column.append(row[gps_time_index])
+#         sat_x_column.append(float(row[sat_x_index]))
+#         sat_y_column.append(float(row[sat_y_index]))
+#         sat_z_column.append(float(row[sat_z_index]))
+#         pseudorange_column.append(float(row[pseudorange_index]))
+#         cn0_column.append(float(row[cn0_index]))
+#
+# # Convert lists to numpy arrays for easier manipulation
+# gps_time_array = np.array(gps_time_column)
+# sat_x_array = np.array(sat_x_column)
+# sat_y_array = np.array(sat_y_column)
+# sat_z_array = np.array(sat_z_column)
+# pseudorange_array = np.array(pseudorange_column)
+# weights = np.array(cn0_column)
+# # Combine satellite positions into a single variable xs
+# xs = np.column_stack((sat_x_array, sat_y_array, sat_z_array))
+#
+# for i in range(len(gps_time_array)):
+#     #initial guesses of receiver clock bias and position
+#     b0 = 0
+#     x0 = np.array([0, 0, 0])
+#     pr = prm + LIGHTSPEED * delT
+#     pr = pr.to_numpy()
 
-    # Read the first row to get the column headers
-    headers = next(reader)
+# gps_time = input("which gps time to look for?")
+positional_df = positioning_algorithm(csvfile)
+print(positional_df)
+xs = positional_df.iloc[0:1, 1:4]
+print(xs)
+print(convertXYZtoLLA(xs))
 
-    # Find the indices of the required columns
-    sat_x_index = headers.index('Sat.X')
-    sat_y_index = headers.index('Sat.Y')
-    sat_z_index = headers.index('Sat.Z')
-    pseudorange_index = headers.index('Pseudo-Range')
-    cn0_index = headers.index('CN0')
+# print("Position Estimate:", position_estimate)
+# print("lat-long-alt:", convertXYZtoLLA(position_estimate))
+# print("Bias Estimate:", bias_estimate)
+# print("Norm of Residuals:", norm_dp)
 
-
-    # Iterate through each row and extract the values of the required columns
-    for row in reader:
-        sat_x_column.append(float(row[sat_x_index]))
-        sat_y_column.append(float(row[sat_y_index]))
-        sat_z_column.append(float(row[sat_z_index]))
-        pseudorange_column.append(float(row[pseudorange_index]))
-        cn0_column.append(float(row[cn0_index]))
-
-# Convert lists to numpy arrays for easier manipulation
-sat_x_array = np.array(sat_x_column)
-sat_y_array = np.array(sat_y_column)
-sat_z_array = np.array(sat_z_column)
-pseudorange_array = np.array(pseudorange_column)
-weights = np.array(cn0_column)
-# Combine satellite positions into a single variable xs
-xs = np.column_stack((sat_x_array, sat_y_array, sat_z_array))
-
-#initial guesses of receiver clock bias and position
-b0 = 0
-x0 = np.array([0, 0, 0])
-pr = prm + LIGHTSPEED * delT
-pr = pr.to_numpy()
-
-
-
-def weighted_least_squares(xs, measured_pseudorange, x0, b0, weights):
-    dx = 100 * np.ones(3)
-    b = b0
-    G = np.ones((measured_pseudorange.size, 4))
-    iterations = 0
-
-    while np.linalg.norm(dx) > 1e-3:
-        r = np.linalg.norm(xs - x0, axis=1)
-        phat = r + b0
-        deltaP = measured_pseudorange - phat
-
-        # Modify residuals using weights
-        weighted_residuals = deltaP / np.sqrt(weights)
-
-        # Modify G matrix using weights
-        weighted_G = -(xs - x0) / r[:, None] / np.sqrt(weights[:, None])
-        G[:, 0:3] = weighted_G
-
-        # Solve weighted least squares
-        sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ weighted_residuals
-
-        dx = sol[0:3]
-        db = sol[3]
-        x0 = x0 + dx
-        b0 = b0 + db
-    norm_dp = np.linalg.norm(measured_pseudorange - phat)
-    return x0, b0, norm_dp
-
-x, b, dp = weighted_least_squares(xs, pr, x0, b0, weights)
-print(convertXYZtoLLA(x))
-print(b/LIGHTSPEED)
-print(dp)

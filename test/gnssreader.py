@@ -172,7 +172,10 @@ xs = sv_position[['x_k', 'y_k', 'z_k']].to_numpy()
 # Apply satellite clock bias to correct the measured pseudorange values
 pr = one_epoch['PrM'] + LIGHTSPEED * sv_position['delT_sv']
 pr = pr.to_numpy()
-
+print("**********************8")
+print(one_epoch['PrM'])
+print(sv_position['delT_sv'])
+print(pr)
 parent_directory = os.path.split(os.getcwd())[0]
 input_fpath = os.path.join(parent_directory, "test1.csv")
 # Open the CSV file
@@ -197,61 +200,62 @@ with open(input_fpath, newline='') as csvfile:
 
 weights = np.array(cn0_column)
 
-# def least_squares(xs, measured_pseudorange, x0, b0):
-#     dx = 100*np.ones(3)
-#     b = b0
-#     # set up the G matrix with the right dimensions. We will later replace the first 3 columns
-#     # note that b here is the clock bias in meters equivalent, so the actual clock bias is b/LIGHTSPEED
-#     G = np.ones((measured_pseudorange.size, 4))
-#     iterations = 0
-#     while np.linalg.norm(dx) > 1e-3:
-#         # Eq. (2):
-#         r = np.linalg.norm(xs - x0, axis=1)
-#         # Eq. (1):
-#         phat = r + b0
-#         # Eq. (3):
-#         deltaP = measured_pseudorange - phat
-#         G[:, 0:3] = -(xs - x0) / r[:, None]
-#         # Eq. (4):
-#         sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ deltaP
-#         # Eq. (5):
-#         dx = sol[0:3]
-#         db = sol[3]
-#         x0 = x0 + dx
-#         b0 = b0 + db
-#     norm_dp = np.linalg.norm(deltaP)
-#     return x0, b0, norm_dp
-
-def least_squares(xs, measured_pseudorange, x0, b0, weights):
-    dx = 100 * np.ones(3)
+def least_squares(xs, measured_pseudorange, x0, b0):
+    dx = 100*np.ones(3)
     b = b0
+    # set up the G matrix with the right dimensions. We will later replace the first 3 columns
+    # note that b here is the clock bias in meters equivalent, so the actual clock bias is b/LIGHTSPEED
     G = np.ones((measured_pseudorange.size, 4))
     iterations = 0
-
     while np.linalg.norm(dx) > 1e-3:
+        # Eq. (2):
         r = np.linalg.norm(xs - x0, axis=1)
+        # Eq. (1):
         phat = r + b0
+        # Eq. (3):
         deltaP = measured_pseudorange - phat
-
-        # Modify residuals using weights
-        weighted_residuals = deltaP / np.sqrt(weights)
-
-        # Modify G matrix using weights
-        weighted_G = -(xs - x0) / r[:, None] / np.sqrt(weights[:, None])
-        G[:, 0:3] = weighted_G
-
-        # Solve weighted least squares
-        sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ weighted_residuals
-
+        G[:, 0:3] = -(xs - x0) / r[:, None]
+        # Eq. (4):
+        sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ deltaP
+        # Eq. (5):
         dx = sol[0:3]
         db = sol[3]
         x0 = x0 + dx
         b0 = b0 + db
-    norm_dp = np.linalg.norm(measured_pseudorange - phat)
+    norm_dp = np.linalg.norm(deltaP)
     return x0, b0, norm_dp
 
+# def least_squares(xs, measured_pseudorange, x0, b0, weights):
+#     dx = 100 * np.ones(3)
+#     b = b0
+#     G = np.ones((measured_pseudorange.size, 4))
+#     iterations = 0
+#
+#     while np.linalg.norm(dx) > 1e-3:
+#         r = np.linalg.norm(xs - x0, axis=1)
+#         phat = r + b0
+#         deltaP = measured_pseudorange - phat
+#
+#         # Modify residuals using weights
+#         weighted_residuals = deltaP / np.sqrt(weights)
+#
+#         # Modify G matrix using weights
+#         weighted_G = -(xs - x0) / r[:, None] / np.sqrt(weights[:, None])
+#         G[:, 0:3] = weighted_G
+#
+#         # Solve weighted least squares
+#         sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ weighted_residuals
+#
+#         dx = sol[0:3]
+#         db = sol[3]
+#         x0 = x0 + dx
+#         b0 = b0 + db
+#     norm_dp = np.linalg.norm(measured_pseudorange - phat)
+#     return x0, b0, norm_dp
 
-x, b, dp = least_squares(xs, pr, x0, b0, weights)
+
+x, b, dp = least_squares(xs, pr, x0, b0)
+print(x)
 print(navpy.ecef2lla(x))
 print(b/LIGHTSPEED)
 print(dp)
@@ -270,7 +274,7 @@ for epoch in measurements['Epoch'].unique():
         pr = one_epoch['PrM'] + LIGHTSPEED * sv_position['delT_sv']
         pr = pr.to_numpy()
 
-        x, b, dp = least_squares(xs, pr, x, b, weights)
+        x, b, dp = least_squares(xs, pr, x, b)
         ecef_list.append(x)
 
 # Perform coordinate transformations using the Navpy library
