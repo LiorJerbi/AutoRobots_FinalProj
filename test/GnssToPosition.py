@@ -82,19 +82,16 @@ def positioning_algorithm(csv_file):
 
         # Apply weighted least squares algorithm
         x_estimate, bias_estimate, norm_dp = weighted_least_squares(xs, measured_pseudorange, x0, b0,weights)
-        data.append([time,x_estimate[0],x_estimate[1],x_estimate[2]])
-    df_ans = pd.DataFrame(data,columns=["GPS_Time","Pos_X","Pos_Y","Pos_Z"])
-    print(df_ans)
+        lla = convertXYZtoLLA(x_estimate)
+        data.append([time,x_estimate[0],x_estimate[1],x_estimate[2],lla[0],lla[1],lla[2]])
+    df_ans = pd.DataFrame(data,columns=["GPS_Unique_Time","Pos_X","Pos_Y","Pos_Z","Lat","Lon","Alt"])
     return df_ans
 
 def convertXYZtoLLA(val):
     return navpy.ecef2lla(val)
 
 def ParseToCSV():
-    # path = input('pls enter dir path: \n')
-    # dirname = os.path.basename(path)
-    # filename = os.path.splitext(dirname)[0]
-    filename = 'test1'
+    filename = 'GNSStoPosition'
     data = []
     fields = ['GPS time', 'SatPRN (ID)', 'Sat.X', 'Sat.Y', 'Sat.Z', 'Pseudo-Range', 'CN0', 'Doppler']
 
@@ -102,15 +99,6 @@ def ParseToCSV():
     ephemeris_data_directory = os.path.join(parent_directory, 'data')
     sys.path.insert(0, parent_directory)
 
-    # file_pattern = os.path.join(parent_directory, 'data', 'sample', 'gnss_log_*.txt')
-    # matching_files = glob.glob(file_pattern)
-    # # Check if any matching files were found
-    # if matching_files:
-        # If multiple matching files were found, you may choose one or iterate over them
-        # input_filepath = matching_files[0]  # Here, we're selecting the first matching file
-    #     print("Found matching file:", input_filepath)
-    # else:
-    #     print("No matching files found.")
     input_filepath = os.path.join(parent_directory, 'data', 'sample', 'gnss_log_2024_04_13_19_51_17.txt')
     # Open the CSV file and iterate over its rows
     with open(input_filepath) as csvfile:
@@ -307,68 +295,22 @@ def ParseToCSV():
 
         # Write the data
         writer.writerows(data)
-    return one_epoch['PrM'], sv_position['delT_sv']
+    return
 
 
-prm, delT = ParseToCSV()
+ParseToCSV()
 
 parent_directory = os.path.split(os.getcwd())[0]
-input_fpath = os.path.join(parent_directory, "test1.csv")
+input_fpath = os.path.join(parent_directory, "GNSStoPosition.csv")
 
 
 # Open the CSV file
 csvfile = open(input_fpath, newline='')
     # Create a CSV reader object
-    # reader = csv.reader(csvfile)
-#
-#     # Read the first row to get the column headers
-#     headers = next(reader)
-#
-#     # Find the indices of the required columns
-#     gps_time_index = headers.index("GPS time")
-#     sat_x_index = headers.index('Sat.X')
-#     sat_y_index = headers.index('Sat.Y')
-#     sat_z_index = headers.index('Sat.Z')
-#     pseudorange_index = headers.index('Pseudo-Range')
-#     cn0_index = headers.index('CN0')
-#
-#
-#
-#     # Iterate through each row and extract the values of the required columns
-#     for row in reader:
-#         gps_time_column.append(row[gps_time_index])
-#         sat_x_column.append(float(row[sat_x_index]))
-#         sat_y_column.append(float(row[sat_y_index]))
-#         sat_z_column.append(float(row[sat_z_index]))
-#         pseudorange_column.append(float(row[pseudorange_index]))
-#         cn0_column.append(float(row[cn0_index]))
-#
-# # Convert lists to numpy arrays for easier manipulation
-# gps_time_array = np.array(gps_time_column)
-# sat_x_array = np.array(sat_x_column)
-# sat_y_array = np.array(sat_y_column)
-# sat_z_array = np.array(sat_z_column)
-# pseudorange_array = np.array(pseudorange_column)
-# weights = np.array(cn0_column)
-# # Combine satellite positions into a single variable xs
-# xs = np.column_stack((sat_x_array, sat_y_array, sat_z_array))
-#
-# for i in range(len(gps_time_array)):
-#     #initial guesses of receiver clock bias and position
-#     b0 = 0
-#     x0 = np.array([0, 0, 0])
-#     pr = prm + LIGHTSPEED * delT
-#     pr = pr.to_numpy()
 
-# gps_time = input("which gps time to look for?")
 positional_df = positioning_algorithm(csvfile)
-print(positional_df)
-xs = positional_df.iloc[0:1, 1:4]
-print(xs)
-print(convertXYZtoLLA(xs))
+existing_df = pd.read_csv(input_fpath)
+existing_df = pd.concat([existing_df, positional_df], axis=1)
+existing_df.to_csv(input_fpath, index=False)
 
-# print("Position Estimate:", position_estimate)
-# print("lat-long-alt:", convertXYZtoLLA(position_estimate))
-# print("Bias Estimate:", bias_estimate)
-# print("Norm of Residuals:", norm_dp)
 
