@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import navpy
 from gnssutils import ephemeris_manager
+import simplekml
 
 
 LIGHTSPEED = 2.99792458e8
@@ -81,7 +82,7 @@ def positioning_algorithm(csv_file):
         weights = df_gps_time_sorted['CN0'].values
 
         # Apply weighted least squares algorithm
-        x_estimate, bias_estimate, norm_dp = weighted_least_squares(xs, measured_pseudorange, x0, b0,weights)
+        x_estimate, bias_estimate, norm_dp = least_squares(xs, measured_pseudorange, x0, b0)
         lla = convertXYZtoLLA(x_estimate)
         data.append([time,x_estimate[0],x_estimate[1],x_estimate[2],lla[0],lla[1],lla[2]])
     df_ans = pd.DataFrame(data,columns=["GPS_Unique_Time","Pos_X","Pos_Y","Pos_Z","Lat","Lon","Alt"])
@@ -99,7 +100,7 @@ def ParseToCSV():
     ephemeris_data_directory = os.path.join(parent_directory, 'data')
     sys.path.insert(0, parent_directory)
 
-    input_filepath = os.path.join(parent_directory, 'data', 'sample', 'gnss_log_2024_04_13_19_51_17.txt')
+    input_filepath = os.path.join(parent_directory, 'data', 'sample', 'gnss_log_2024_04_13_19_52_00.txt')
     # Open the CSV file and iterate over its rows
     with open(input_filepath) as csvfile:
         reader = csv.reader(csvfile)
@@ -313,4 +314,27 @@ existing_df = pd.read_csv(input_fpath)
 existing_df = pd.concat([existing_df, positional_df], axis=1)
 existing_df.to_csv(input_fpath, index=False)
 
+# Create a KML object
+kml = simplekml.Kml()
 
+# Group data by unique GPS times
+grouped = existing_df.groupby('GPS_Unique_Time')
+
+# Iterate over each group
+for gps_time, group_data in grouped:
+    # Create a new folder for each GPS time
+    folder = kml.newfolder(name=str(gps_time))
+
+    # Iterate over rows in the group
+    for index, row in group_data.iterrows():
+        # Add a point for each row (with Lat and Lon)
+        folder.newpoint(
+            name=str(row['GPS_Unique_Time']),  # Use GPS_Unique_Time as the name
+            coords=[(row['Lon'], row['Lat'])]  # Use Lon and Lat for coordinates
+        )
+
+# Specify the path for saving the KML file
+output_path = os.path.join(parent_directory, 'output.kml')
+
+# Save the KML file
+kml.save(output_path)
