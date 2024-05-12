@@ -1,7 +1,4 @@
 import sys, os, csv
-parent_directory = os.path.split(os.getcwd())[0]
-ephemeris_data_directory = os.path.join(parent_directory, 'data')
-sys.path.insert(0, parent_directory)
 from datetime import datetime, timezone, timedelta
 import pandas as pd
 import numpy as np
@@ -9,7 +6,9 @@ import matplotlib.pyplot as plt
 import navpy
 from gnssutils import ephemeris_manager
 
-
+parent_directory = os.path.split(os.getcwd())[0]
+ephemeris_data_directory = os.path.join(parent_directory, 'data')
+sys.path.insert(0, parent_directory)
 # Get path to sample file in data directory, which is located in the parent directory of this notebook
 input_filepath = os.path.join(parent_directory, 'data', 'sample', 'gnss_log_2024_04_13_19_52_00.txt')
 

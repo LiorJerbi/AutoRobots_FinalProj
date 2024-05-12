@@ -1,42 +1,53 @@
-import glob
 import sys, os, csv
 from datetime import datetime, timezone, timedelta
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import navpy
 from gnssutils import ephemeris_manager
 import simplekml
 
+## TODO: lines 14-39 delete if not needed
+## TODO: lines 83,183,185 delete if not needed
+## TODO: add more comments or modify readme file better add to "pip install" - georinex unlzw3
 
 LIGHTSPEED = 2.99792458e8
+ephemeris_data_directory = os.path.join('data')
 
-def weighted_least_squares(xs, measured_pseudorange, x0, b0, weights):
-    dx = 100 * np.ones(3)
-    b = b0
-    G = np.ones((measured_pseudorange.size, 4))
-    iterations = 0
+###################################################################################
+################################ CHANGE FILE NAME #################################
 
-    while np.linalg.norm(dx) > 1e-3:
-        r = np.linalg.norm(xs - x0, axis=1)
-        phat = r + b0
-        deltaP = measured_pseudorange - phat
+input_filepath = os.path.join('gnss_log_2024_04_13_19_52_00.txt')
 
-        # Modify residuals using weights
-        weighted_residuals = deltaP / np.sqrt(weights)
+################################ CHANGE FILE NAME #################################
+###################################################################################
 
-        # Modify G matrix using weights
-        weighted_G = -(xs - x0) / r[:, None] / np.sqrt(weights[:, None])
-        G[:, 0:3] = weighted_G
 
-        # Solve weighted least squares
-        sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ weighted_residuals
-        dx = sol[0:3]
-        db = sol[3]
-        x0 = x0 + dx
-        b0 = b0 + db
-    norm_dp = np.linalg.norm(measured_pseudorange - phat)
-    return x0, b0, norm_dp
+# def weighted_least_squares(xs, measured_pseudorange, x0, b0, weights):
+#     dx = 100 * np.ones(3)
+#     b = b0
+#     G = np.ones((measured_pseudorange.size, 4))
+#     iterations = 0
+#
+#     while np.linalg.norm(dx) > 1e-3:
+#         r = np.linalg.norm(xs - x0, axis=1)
+#         phat = r + b0
+#         deltaP = measured_pseudorange - phat
+#
+#         # Modify residuals using weights
+#         weighted_residuals = deltaP / np.sqrt(weights)
+#
+#         # Modify G matrix using weights
+#         weighted_G = -(xs - x0) / r[:, None] / np.sqrt(weights[:, None])
+#         G[:, 0:3] = weighted_G
+#
+#         # Solve weighted least squares
+#         sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ weighted_residuals
+#         dx = sol[0:3]
+#         db = sol[3]
+#         x0 = x0 + dx
+#         b0 = b0 + db
+#     norm_dp = np.linalg.norm(measured_pseudorange - phat)
+#     return x0, b0, norm_dp
 def least_squares(xs, measured_pseudorange, x0, b0):
     dx = 100*np.ones(3)
     b = b0
@@ -79,7 +90,7 @@ def positioning_algorithm(csv_file):
         measured_pseudorange = df_gps_time_sorted['Pseudo-Range'].values
         x0 = np.array([0, 0, 0])  # Initial guess for position
         b0 = 0  # Initial guess for bias
-        weights = df_gps_time_sorted['CN0'].values
+        # weights = df_gps_time_sorted['CN0'].values
 
         # Apply weighted least squares algorithm
         x_estimate, bias_estimate, norm_dp = least_squares(xs, measured_pseudorange, x0, b0)
@@ -96,11 +107,6 @@ def ParseToCSV():
     data = []
     fields = ['GPS time', 'SatPRN (ID)', 'Sat.X', 'Sat.Y', 'Sat.Z', 'Pseudo-Range', 'CN0', 'Doppler']
 
-    parent_directory = os.path.split(os.getcwd())[0]
-    ephemeris_data_directory = os.path.join(parent_directory, 'data')
-    sys.path.insert(0, parent_directory)
-
-    input_filepath = os.path.join(parent_directory, 'data', 'sample', 'gnss_log_2024_04_13_19_52_00.txt')
     # Open the CSV file and iterate over its rows
     with open(input_filepath) as csvfile:
         reader = csv.reader(csvfile)
@@ -197,7 +203,6 @@ def ParseToCSV():
             num_sats = len(one_epoch.index)
             epoch += 1
 
-        # print(timestamp)
         sats = one_epoch.index.unique().tolist()
         ephemeris = manager.get_ephemeris(timestamp, sats)
 
@@ -276,17 +281,15 @@ def ParseToCSV():
 
         CN0 = one_epoch['Cn0DbHz'].tolist()
         doppler = measurements['PseudorangeRateMetersPerSecond'].tolist()
-        # print(one_epoch['PrM'])
         pseudo_range = (one_epoch['PrM'] + LIGHTSPEED*sv_position['delT_sv']).to_numpy()
     # saving all the above data into csv file
-    #     data = []
         for i in range(len(Yco)):
             gpsTime[i] = timestamp
             row = [gpsTime[i], satPRN[i], Xco[i], Yco[i], Zco[i], pseudo_range[i], CN0[i], doppler[prInd]]
             data.append(row)
             prInd+=1
 
-    file_path = os.path.join(parent_directory, filename + '.csv')
+    file_path = os.path.join(filename + '.csv')
     # Write data to CSV file
     with open(file_path, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
@@ -300,14 +303,11 @@ def ParseToCSV():
 
 
 ParseToCSV()
-
-parent_directory = os.path.split(os.getcwd())[0]
-input_fpath = os.path.join(parent_directory, "GNSStoPosition.csv")
+input_fpath = os.path.join("GNSStoPosition.csv")
 
 
 # Open the CSV file
 csvfile = open(input_fpath, newline='')
-    # Create a CSV reader object
 
 positional_df = positioning_algorithm(csvfile)
 existing_df = pd.read_csv(input_fpath)
@@ -317,24 +317,33 @@ existing_df.to_csv(input_fpath, index=False)
 # Create a KML object
 kml = simplekml.Kml()
 
-# Group data by unique GPS times
-grouped = existing_df.groupby('GPS_Unique_Time')
+# Accumulate coordinates for the LineString
+coords = []
 
-# Iterate over each group
-for gps_time, group_data in grouped:
-    # Create a new folder for each GPS time
-    folder = kml.newfolder(name=str(gps_time))
+# Iterate over the data
+for index, row in existing_df.iterrows():
+    gps_time = row['GPS_Unique_Time']
 
-    # Iterate over rows in the group
-    for index, row in group_data.iterrows():
-        # Add a point for each row (with Lat and Lon)
-        folder.newpoint(
-            name=str(row['GPS_Unique_Time']),  # Use GPS_Unique_Time as the name
-            coords=[(row['Lon'], row['Lat'])]  # Use Lon and Lat for coordinates
-        )
+    if row['Alt'] > 0 and row['Alt'] < 1000:
+        coords.append((row['Lon'], row['Lat'], row['Alt']))
+
+        # Create a point placemark
+        pnt = kml.newpoint(name=str(row['GPS_Unique_Time']), coords=[(row['Lon'], row['Lat'], row['Alt'])])
+
+        # Add time information to the placemark
+        gps_times = pd.to_datetime(gps_time)
+        pnt.timestamp.when = gps_times.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+# Create a LineString for the path
+linestring = kml.newlinestring(name="Path", description="GPS Path")
+linestring.coords = coords
+linestring.altitudemode = simplekml.AltitudeMode.relativetoground  # Adjust altitude mode as needed
+# Set style for the LineString (optional)
+linestring.style.linestyle.color = simplekml.Color.red  # Change color to red
+linestring.style.linestyle.width = 3  # Change width if needed
 
 # Specify the path for saving the KML file
-output_path = os.path.join(parent_directory, 'output.kml')
+output_path = os.path.join('GnssToRoute.kml')
 
 # Save the KML file
 kml.save(output_path)
