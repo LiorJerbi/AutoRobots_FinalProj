@@ -61,4 +61,3 @@ The script generates the following outputs:
 - Tomer Klugman - 312723612
 - Hadas Evers - 206398984
 - Lior Jerbi - 314899493
-   ב
