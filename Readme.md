@@ -55,3 +55,10 @@ python GnssToPosition.py
 The script generates the following outputs:
 1. GnssToRoute.kml: KML file containing the computed path with timestamps for each position.
 2. GNSStoPosition.csv: CSV file with the computed positions and additional columns (Pos.X, Pos.Y, Pos.Z, Lat, Lon, Alt).
+
+## Contributors
+- Yael Rosen - 209498211
+- Tomer Klugman - 312723612
+- Hadas Evers - 206398984
+- Lior Jerbi - 314899493
+   ב
