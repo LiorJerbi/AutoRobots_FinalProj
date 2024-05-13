@@ -6,10 +6,6 @@ import navpy
 from gnssutils import ephemeris_manager
 import simplekml
 
-## TODO: lines 14-39 delete if not needed
-## TODO: lines 83,183,185 delete if not needed
-## TODO: add more comments or modify readme file better add to "pip install" - georinex unlzw3
-
 LIGHTSPEED = 2.99792458e8
 ephemeris_data_directory = os.path.join('data')
 
@@ -22,32 +18,6 @@ input_filepath = os.path.join('gnss_log_2024_04_13_19_52_00.txt')
 ###################################################################################
 
 
-# def weighted_least_squares(xs, measured_pseudorange, x0, b0, weights):
-#     dx = 100 * np.ones(3)
-#     b = b0
-#     G = np.ones((measured_pseudorange.size, 4))
-#     iterations = 0
-#
-#     while np.linalg.norm(dx) > 1e-3:
-#         r = np.linalg.norm(xs - x0, axis=1)
-#         phat = r + b0
-#         deltaP = measured_pseudorange - phat
-#
-#         # Modify residuals using weights
-#         weighted_residuals = deltaP / np.sqrt(weights)
-#
-#         # Modify G matrix using weights
-#         weighted_G = -(xs - x0) / r[:, None] / np.sqrt(weights[:, None])
-#         G[:, 0:3] = weighted_G
-#
-#         # Solve weighted least squares
-#         sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ weighted_residuals
-#         dx = sol[0:3]
-#         db = sol[3]
-#         x0 = x0 + dx
-#         b0 = b0 + db
-#     norm_dp = np.linalg.norm(measured_pseudorange - phat)
-#     return x0, b0, norm_dp
 def least_squares(xs, measured_pseudorange, x0, b0):
     dx = 100*np.ones(3)
     b = b0
@@ -90,9 +60,6 @@ def positioning_algorithm(csv_file):
         measured_pseudorange = df_gps_time_sorted['Pseudo-Range'].values
         x0 = np.array([0, 0, 0])  # Initial guess for position
         b0 = 0  # Initial guess for bias
-        # weights = df_gps_time_sorted['CN0'].values
-
-        # Apply weighted least squares algorithm
         x_estimate, bias_estimate, norm_dp = least_squares(xs, measured_pseudorange, x0, b0)
         lla = convertXYZtoLLA(x_estimate)
         data.append([time,x_estimate[0],x_estimate[1],x_estimate[2],lla[0],lla[1],lla[2]])
@@ -105,7 +72,7 @@ def convertXYZtoLLA(val):
 def ParseToCSV():
     filename = 'GNSStoPosition'
     data = []
-    fields = ['GPS time', 'SatPRN (ID)', 'Sat.X', 'Sat.Y', 'Sat.Z', 'Pseudo-Range', 'CN0', 'Doppler']
+    fields = ['GPS time', 'SatPRN (ID)', 'Sat.X', 'Sat.Y', 'Sat.Z', 'Pseudo-Range', 'CN0']
 
     # Open the CSV file and iterate over its rows
     with open(input_filepath) as csvfile:
@@ -184,14 +151,10 @@ def ParseToCSV():
     # Convert to meters
     measurements['PrM'] = LIGHTSPEED * measurements['prSeconds']
     measurements['PrSigmaM'] = LIGHTSPEED * 1e-9 * measurements['ReceivedSvTimeUncertaintyNanos']
-
-    # Extract pseudo-range calculations
-    # pseudo_range = measurements['PrM'].tolist()
-    # print(pseudo_range)
     manager = ephemeris_manager.EphemerisManager(ephemeris_data_directory)
     # Calculate satellite Y,X,Z coordinates
     # loop to go through each timezone of satellites
-    prInd=0
+
     for i in range(len(measurements['Epoch'].unique())):
         epoch = i
         num_sats = 0
@@ -280,14 +243,12 @@ def ParseToCSV():
             epoch += 1
 
         CN0 = one_epoch['Cn0DbHz'].tolist()
-        doppler = measurements['PseudorangeRateMetersPerSecond'].tolist()
         pseudo_range = (one_epoch['PrM'] + LIGHTSPEED*sv_position['delT_sv']).to_numpy()
     # saving all the above data into csv file
         for i in range(len(Yco)):
             gpsTime[i] = timestamp
-            row = [gpsTime[i], satPRN[i], Xco[i], Yco[i], Zco[i], pseudo_range[i], CN0[i], doppler[prInd]]
+            row = [gpsTime[i], satPRN[i], Xco[i], Yco[i], Zco[i], pseudo_range[i], CN0[i]]
             data.append(row)
-            prInd+=1
 
     file_path = os.path.join(filename + '.csv')
     # Write data to CSV file
