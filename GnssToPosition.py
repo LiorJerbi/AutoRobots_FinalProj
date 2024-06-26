@@ -19,7 +19,7 @@ CAIRO_LON = [31.35, 31.78]
 ###################################################################################
 ################################ CHANGE FILE NAME #################################
 
-input_filepath = os.path.join('gnss_log_2024_04_13_19_53_33.txt')
+input_filepath = os.path.join('gnss_log_2024_06_26_21_08_40.txt')
 
 ################################ CHANGE FILE NAME #################################
 ###################################################################################
@@ -67,7 +67,7 @@ def positioning_algorithm(csv_file):
     df_times = df['GPS time'].unique()
     for time in df_times:
         # Extract rows with given GPS time
-        df_gps_time = df[df['GPS time']== time]
+        df_gps_time = df[df['GPS time'] == time]
         # Sort data based on 'SatPRN (ID)' column
         df_gps_time_sorted = df_gps_time.sort_values(by='SatPRN (ID)')
 
@@ -78,18 +78,19 @@ def positioning_algorithm(csv_file):
         b0 = 0  # Initial guess for bias
         x_estimate, bias_estimate, norm_dp = least_squares(xs, measured_pseudorange, x0, b0)
         lla = convertXYZtoLLA(x_estimate)
-        if is_corrupted_position(lla[0],lla[1]):
-            print("Corrupted gnss recording... Exiting!")
-            csv_file.close()
-            os.remove("GNSStoPosition.csv")
-            exit()
+        ################# Satellite Corruption identifier ###########################
+        if is_corrupted_position(lla[0], lla[1]):
+            # corrupted_sat_id = df_gps_time_sorted.iloc[0]['SatPRN (ID)']
+            print("Corrupted location noticed at time: " + str(time) + " continue to the next one.")
         else:
-            data.append([time,x_estimate[0],x_estimate[1],x_estimate[2],lla[0],lla[1],lla[2]])
-    df_ans = pd.DataFrame(data,columns=["GPS_Unique_Time","Pos_X","Pos_Y","Pos_Z","Lat","Lon","Alt"])
+            data.append([time, x_estimate[0], x_estimate[1], x_estimate[2], lla[0], lla[1], lla[2]])
+    df_ans = pd.DataFrame(data, columns=["GPS_Unique_Time", "Pos_X", "Pos_Y", "Pos_Z", "Lat", "Lon", "Alt"])
     return df_ans
+
 
 def convertXYZtoLLA(val):
     return navpy.ecef2lla(val)
+
 
 def ParseToCSV():
     filename = 'GNSStoPosition'
@@ -128,7 +129,12 @@ def ParseToCSV():
     uniqSatPRN = measurements['SvName'].unique().tolist()
 
     # Convert columns to numeric representation
-    measurements['Cn0DbHz'] = pd.to_numeric(measurements['Cn0DbHz'])
+
+    # Filter by C/N0 (Carrier-to-Noise Density Ratio)
+    min_cn0_threshold = 30  # Example threshold
+    measurements['Cn0DbHz'] = pd.to_numeric(measurements['Cn0DbHz'])  # Ensure Cn0DbHz column is numeric
+    measurements = measurements[measurements['Cn0DbHz'] >= min_cn0_threshold]
+
     measurements['TimeNanos'] = pd.to_numeric(measurements['TimeNanos'])
     measurements['FullBiasNanos'] = pd.to_numeric(measurements['FullBiasNanos'])
     measurements['ReceivedSvTimeNanos'] = pd.to_numeric(measurements['ReceivedSvTimeNanos'])
@@ -160,7 +166,6 @@ def ParseToCSV():
 
     # Extract GPS time from the data
     gpsTime = measurements['UnixTime'].tolist()
-    uniqGpsTimes = measurements['UnixTime'].unique().tolist()
 
     # Calculate pseudorange in seconds
     WEEKSEC = 604800
@@ -293,6 +298,14 @@ def original_gnss_to_position():
     csvfile = open(input_fpath, newline='')
 
     positional_df = positioning_algorithm(csvfile)
+    # Check if Lat or Lon columns are empty
+    if positional_df['Lat'].empty or positional_df['Lon'].empty:
+        print("All the satellites are corrupted, deleting csv file.")
+        csvfile.close()
+        os.remove("GNSStoPosition.csv")
+        exit()
+    else:
+        print("Positional Algo succeeded, creating CSV and KML files.")
     existing_df = pd.read_csv(input_fpath)
     existing_df = pd.concat([existing_df, positional_df], axis=1)
     existing_df.to_csv(input_fpath, index=False)
@@ -307,7 +320,7 @@ def original_gnss_to_position():
     for index, row in existing_df.iterrows():
         gps_time = row['GPS_Unique_Time']
 
-        if 0 < row['Alt'] < 1000:
+        if -100000 < row['Alt'] < 100000:
             coords.append((row['Lon'], row['Lat'], row['Alt']))
 
             # Create a point placemark
