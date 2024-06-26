@@ -9,13 +9,29 @@ import simplekml
 LIGHTSPEED = 2.99792458e8
 ephemeris_data_directory = os.path.join('data')
 
+# Constants for corruption check
+BEIRUT_LAT = 33.82
+BEIRUT_LON = 35.49
+CAIRO_LAT = [30.71, 30.08]
+CAIRO_LON = [31.35, 31.78]
+
+
 ###################################################################################
 ################################ CHANGE FILE NAME #################################
 
-input_filepath = os.path.join('gnss_log_2024_04_13_19_52_00.txt')
+input_filepath = os.path.join('gnss_log_2024_04_13_19_53_33.txt')
 
 ################################ CHANGE FILE NAME #################################
 ###################################################################################
+
+
+def is_corrupted_position(lat, lon):
+    lat_rounded = round(lat, 2)
+    lon_rounded = round(lon, 2)
+    if (lat_rounded == BEIRUT_LAT and lon_rounded == BEIRUT_LON) or \
+       (CAIRO_LAT[0] == lat_rounded or lat_rounded == CAIRO_LAT[1] and CAIRO_LON[0] == lon_rounded or lon_rounded == CAIRO_LON[1]):
+        return True
+    return False
 
 
 def least_squares(xs, measured_pseudorange, x0, b0):
@@ -62,7 +78,13 @@ def positioning_algorithm(csv_file):
         b0 = 0  # Initial guess for bias
         x_estimate, bias_estimate, norm_dp = least_squares(xs, measured_pseudorange, x0, b0)
         lla = convertXYZtoLLA(x_estimate)
-        data.append([time,x_estimate[0],x_estimate[1],x_estimate[2],lla[0],lla[1],lla[2]])
+        if is_corrupted_position(lla[0],lla[1]):
+            print("Corrupted gnss recording... Exiting!")
+            csv_file.close()
+            os.remove("GNSStoPosition.csv")
+            exit()
+        else:
+            data.append([time,x_estimate[0],x_estimate[1],x_estimate[2],lla[0],lla[1],lla[2]])
     df_ans = pd.DataFrame(data,columns=["GPS_Unique_Time","Pos_X","Pos_Y","Pos_Z","Lat","Lon","Alt"])
     return df_ans
 
@@ -263,48 +285,60 @@ def ParseToCSV():
     return
 
 
-ParseToCSV()
-input_fpath = os.path.join("GNSStoPosition.csv")
+def original_gnss_to_position():
+    ParseToCSV()
+    input_fpath = os.path.join("GNSStoPosition.csv")
 
+    # Open the CSV file
+    csvfile = open(input_fpath, newline='')
 
-# Open the CSV file
-csvfile = open(input_fpath, newline='')
+    positional_df = positioning_algorithm(csvfile)
+    existing_df = pd.read_csv(input_fpath)
+    existing_df = pd.concat([existing_df, positional_df], axis=1)
+    existing_df.to_csv(input_fpath, index=False)
 
-positional_df = positioning_algorithm(csvfile)
-existing_df = pd.read_csv(input_fpath)
-existing_df = pd.concat([existing_df, positional_df], axis=1)
-existing_df.to_csv(input_fpath, index=False)
+    # Create a KML object
+    kml = simplekml.Kml()
 
-# Create a KML object
-kml = simplekml.Kml()
+    # Accumulate coordinates for the LineString
+    coords = []
 
-# Accumulate coordinates for the LineString
-coords = []
+    # Iterate over the data
+    for index, row in existing_df.iterrows():
+        gps_time = row['GPS_Unique_Time']
 
-# Iterate over the data
-for index, row in existing_df.iterrows():
-    gps_time = row['GPS_Unique_Time']
+        if 0 < row['Alt'] < 1000:
+            coords.append((row['Lon'], row['Lat'], row['Alt']))
 
-    if row['Alt'] > 0 and row['Alt'] < 1000:
-        coords.append((row['Lon'], row['Lat'], row['Alt']))
+            # Create a point placemark
+            pnt = kml.newpoint(name=str(row['GPS_Unique_Time']), coords=[(row['Lon'], row['Lat'], row['Alt'])])
 
-        # Create a point placemark
-        pnt = kml.newpoint(name=str(row['GPS_Unique_Time']), coords=[(row['Lon'], row['Lat'], row['Alt'])])
+            # Add time information to the placemark
+            gps_times = pd.to_datetime(gps_time)
+            pnt.timestamp.when = gps_times.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        # Add time information to the placemark
-        gps_times = pd.to_datetime(gps_time)
-        pnt.timestamp.when = gps_times.strftime('%Y-%m-%dT%H:%M:%SZ')
+    # Create a LineString for the path
+    linestring = kml.newlinestring(name="Path", description="GPS Path")
+    linestring.coords = coords
+    linestring.altitudemode = simplekml.AltitudeMode.relativetoground  # Adjust altitude mode as needed
+    # Set style for the LineString (optional)
+    linestring.style.linestyle.color = simplekml.Color.red  # Change color to red
+    linestring.style.linestyle.width = 3  # Change width if needed
 
-# Create a LineString for the path
-linestring = kml.newlinestring(name="Path", description="GPS Path")
-linestring.coords = coords
-linestring.altitudemode = simplekml.AltitudeMode.relativetoground  # Adjust altitude mode as needed
-# Set style for the LineString (optional)
-linestring.style.linestyle.color = simplekml.Color.red  # Change color to red
-linestring.style.linestyle.width = 3  # Change width if needed
+    # Specify the path for saving the KML file
+    output_path = os.path.join('GnssToRoute.kml')
 
-# Specify the path for saving the KML file
-output_path = os.path.join('GnssToRoute.kml')
+    # Save the KML file
+    kml.save(output_path)
 
-# Save the KML file
-kml.save(output_path)
+def main():
+    choice = input("Choose mode (1 for original GNSS to position, 2 for live positioning): ")
+    if choice == '1':
+        original_gnss_to_position()
+    elif choice == '2':
+        print("option 2")
+    else:
+        print("Invalid choice. Exiting.")
+
+if __name__ == "__main__":
+    main()
