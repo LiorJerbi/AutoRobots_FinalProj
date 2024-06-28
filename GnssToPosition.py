@@ -5,6 +5,9 @@ import numpy as np
 import navpy
 from gnssutils import ephemeris_manager
 import simplekml
+from tkinter import Tk
+from tkinter.filedialog import askopenfilename
+
 
 LIGHTSPEED = 2.99792458e8
 ephemeris_data_directory = os.path.join('data')
@@ -19,7 +22,7 @@ CAIRO_LON = [31.35, 31.78]
 ###################################################################################
 ################################ CHANGE FILE NAME #################################
 
-input_filepath = os.path.join('gnss_log_2024_06_26_21_08_40.txt')
+# input_filepath = os.path.join('gnss_log_2024_06_26_21_08_40.txt')
 
 ################################ CHANGE FILE NAME #################################
 ###################################################################################
@@ -92,7 +95,7 @@ def convertXYZtoLLA(val):
     return navpy.ecef2lla(val)
 
 
-def ParseToCSV():
+def ParseToCSV(input_filepath):
     filename = 'GNSStoPosition'
     data = []
     fields = ['GPS time', 'SatPRN (ID)', 'Sat.X', 'Sat.Y', 'Sat.Z', 'Pseudo-Range', 'CN0']
@@ -290,8 +293,8 @@ def ParseToCSV():
     return
 
 
-def original_gnss_to_position():
-    ParseToCSV()
+def original_gnss_to_position(input_filepath):
+    ParseToCSV(input_filepath)
     input_fpath = os.path.join("GNSStoPosition.csv")
 
     # Open the CSV file
@@ -303,7 +306,6 @@ def original_gnss_to_position():
         print("All the satellites are corrupted, deleting csv file.")
         csvfile.close()
         os.remove("GNSStoPosition.csv")
-        exit()
     else:
         print("Positional Algo succeeded, creating CSV and KML files.")
     existing_df = pd.read_csv(input_fpath)
@@ -345,13 +347,32 @@ def original_gnss_to_position():
     kml.save(output_path)
 
 def main():
-    choice = input("Choose mode (1 for original GNSS to position, 2 for live positioning): ")
-    if choice == '1':
-        original_gnss_to_position()
-    elif choice == '2':
-        print("option 2")
-    else:
-        print("Invalid choice. Exiting.")
+
+    while True:
+        choice = input("Choose mode (1 for original GNSS to position, 2 for live positioning): ").strip()
+        if choice == '1':
+            # Hide the main tkinter window
+            root = Tk()
+            root.withdraw()
+            root.focus_force()
+            root.attributes('-topmost', True)
+
+            # Show an "Open" dialog box and return the path to the selected file
+            input_filepath = askopenfilename(title="Select GNSS Log File", filetypes=[("Txt files", "*.txt")])
+            root.destroy()
+            if not input_filepath:
+                print("No file selected. Exiting...")
+                sys.exit()
+
+            original_gnss_to_position(input_filepath)
+        elif choice == '2':
+            print("option 2")
+        else:
+            print("Invalid choice. Exiting.")
+
+        again = input("Do you want to continue for another run? (1 for yes, 2 for no): ").strip()
+        if again == '2':
+            break
 
 if __name__ == "__main__":
     main()
