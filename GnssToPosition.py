@@ -7,6 +7,10 @@ from gnssutils import ephemeris_manager
 import simplekml
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
+import subprocess
+import webbrowser
+import re
+
 
 
 LIGHTSPEED = 2.99792458e8
@@ -26,7 +30,37 @@ CAIRO_LON = [31.35, 31.78]
 
 ################################ CHANGE FILE NAME #################################
 ###################################################################################
+def find_latest_gnss_log():
+    try:
+        # Resetting the ADB command to find the latest file in /sdcard/Download directory
+        adb_command = ["C:/Users/User/Documents/adb/adb.exe", "shell", "ls", "-t", "/sdcard/Download/gnss_log*.txt"]
 
+        # Running the ADB command and capturing the output
+        result = subprocess.run(adb_command, capture_output=True, text=True, check=True)
+
+        # Sorting files by creation date and selecting the latest file
+        files_list = result.stdout.strip().split('\n')
+        latest_file = files_list[0]  # The last file in the sorted list is the newest file
+
+        return latest_file.strip()  # Returning the name of the latest file
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error finding latest file: {e}")
+        return None
+
+def pull_latest_gnss_data():
+    # Finding the latest file in the /sdcard/Download directory
+    latest_file = find_latest_gnss_log()
+
+    if latest_file:
+        local_file_path = "gnss_data.txt"  # Path to the local file
+
+        try:
+            # ADB command to pull the file
+            subprocess.run(["C:/Users/User/Documents/adb/adb.exe", "pull", latest_file, local_file_path], check=True)
+            print(f"GNSS data successfully saved to the local file {local_file_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error pulling data: {e}")
 
 def is_corrupted_position(lat, lon):
     lat_rounded = round(lat, 2)
@@ -96,7 +130,7 @@ def convertXYZtoLLA(val):
 
 
 def ParseToCSV(input_filepath):
-    filename = 'GNSStoPosition'
+    filename = os.path.splitext(os.path.basename(input_filepath))[0]
     data = []
     fields = ['GPS time', 'SatPRN (ID)', 'Sat.X', 'Sat.Y', 'Sat.Z', 'Pseudo-Range', 'CN0']
 
@@ -295,7 +329,9 @@ def ParseToCSV(input_filepath):
 
 def original_gnss_to_position(input_filepath):
     ParseToCSV(input_filepath)
-    input_fpath = os.path.join("GNSStoPosition.csv")
+    filename = os.path.splitext(os.path.basename(input_filepath))[0]
+    input_fpath = filename + '.csv'
+
 
     # Open the CSV file
     csvfile = open(input_fpath, newline='')
@@ -341,10 +377,11 @@ def original_gnss_to_position(input_filepath):
     linestring.style.linestyle.width = 3  # Change width if needed
 
     # Specify the path for saving the KML file
-    output_path = os.path.join('GnssToRoute.kml')
+    output_path = os.path.join(filename + '.kml')
 
     # Save the KML file
     kml.save(output_path)
+
 
 def main():
 
@@ -366,7 +403,8 @@ def main():
 
             original_gnss_to_position(input_filepath)
         elif choice == '2':
-            print("option 2")
+            pull_latest_gnss_data()
+            original_gnss_to_position("gnss_data.txt")
         else:
             print("Invalid choice. Exiting.")
 
