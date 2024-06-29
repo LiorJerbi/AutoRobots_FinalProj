@@ -66,59 +66,107 @@ def is_corrupted_position(lat, lon):
     return False
 
 
-def least_squares(xs, measured_pseudorange, x0, b0):
-    dx = 100*np.ones(3)
+# def least_squares(xs, measured_pseudorange, x0, b0):
+#     dx = 100*np.ones(3)
+#     b = b0
+#     # set up the G matrix with the right dimensions. We will later replace the first 3 columns
+#     # note that b here is the clock bias in meters equivalent, so the actual clock bias is b/LIGHTSPEED
+#     G = np.ones((measured_pseudorange.size, 4))
+#     iterations = 0
+#     while np.linalg.norm(dx) > 1e-3:
+#         # Eq. (2):
+#         r = np.linalg.norm(xs - x0, axis=1)
+#         # Eq. (1):
+#         phat = r + b0
+#         # Eq. (3):
+#         deltaP = measured_pseudorange - phat
+#         G[:, 0:3] = -(xs - x0) / r[:, None]
+#         # Eq. (4):
+#         sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ deltaP
+#         # Eq. (5):
+#         dx = sol[0:3]
+#         db = sol[3]
+#         x0 = x0 + dx
+#         b0 = b0 + db
+#     norm_dp = np.linalg.norm(deltaP)
+#     return x0, b0, norm_dp
+
+
+def weighted_least_squares(xs, measured_pseudorange, x0, b0, weights):
+    dx = 100 * np.ones(3)
     b = b0
-    # set up the G matrix with the right dimensions. We will later replace the first 3 columns
-    # note that b here is the clock bias in meters equivalent, so the actual clock bias is b/LIGHTSPEED
     G = np.ones((measured_pseudorange.size, 4))
     iterations = 0
+
     while np.linalg.norm(dx) > 1e-3:
-        # Eq. (2):
         r = np.linalg.norm(xs - x0, axis=1)
-        # Eq. (1):
         phat = r + b0
-        # Eq. (3):
         deltaP = measured_pseudorange - phat
+        W = np.diag(weights)  # Weight matrix
         G[:, 0:3] = -(xs - x0) / r[:, None]
-        # Eq. (4):
-        sol = np.linalg.inv(np.transpose(G) @ G) @ np.transpose(G) @ deltaP
-        # Eq. (5):
+
+        # Weighted least squares solution
+        sol = np.linalg.inv(G.T @ W @ G) @ G.T @ W @ deltaP
         dx = sol[0:3]
         db = sol[3]
         x0 = x0 + dx
         b0 = b0 + db
+
     norm_dp = np.linalg.norm(deltaP)
     return x0, b0, norm_dp
 
 
+
+# def positioning_algorithm(csv_file):
+#     # Read CSV file
+#     df = pd.read_csv(csv_file)
+#     data = []
+#     df_times = df['GPS time'].unique()
+#     for time in df_times:
+#         # Extract rows with given GPS time
+#         df_gps_time = df[df['GPS time'] == time]
+#         # Sort data based on 'SatPRN (ID)' column
+#         df_gps_time_sorted = df_gps_time.sort_values(by='SatPRN (ID)')
+#
+#         # Extract relevant columns for the algorithm
+#         xs = df_gps_time_sorted[['Sat.X', 'Sat.Y', 'Sat.Z']].values
+#         measured_pseudorange = df_gps_time_sorted['Pseudo-Range'].values
+#         x0 = np.array([0, 0, 0])  # Initial guess for position
+#         b0 = 0  # Initial guess for bias
+#         x_estimate, bias_estimate, norm_dp = least_squares(xs, measured_pseudorange, x0, b0)
+#         lla = convertXYZtoLLA(x_estimate)
+#         if is_corrupted_position(lla[0], lla[1]):
+#             # corrupted_sat_id = df_gps_time_sorted.iloc[0]['SatPRN (ID)']
+#             print("Corrupted location noticed at time: " + str(time) + " continue to the next one.")
+#         else:
+#             data.append([time, x_estimate[0], x_estimate[1], x_estimate[2], lla[0], lla[1], lla[2]])
+#     df_ans = pd.DataFrame(data, columns=["GPS_Unique_Time", "Pos_X", "Pos_Y", "Pos_Z", "Lat", "Lon", "Alt"])
+#     return df_ans
+
+
 def positioning_algorithm(csv_file):
-    # Read CSV file
     df = pd.read_csv(csv_file)
     data = []
     df_times = df['GPS time'].unique()
+    x0 = np.array([0, 0, 0])
+    b0 = 0
     for time in df_times:
-        # Extract rows with given GPS time
         df_gps_time = df[df['GPS time'] == time]
-        # Sort data based on 'SatPRN (ID)' column
         df_gps_time_sorted = df_gps_time.sort_values(by='SatPRN (ID)')
-
-        # Extract relevant columns for the algorithm
         xs = df_gps_time_sorted[['Sat.X', 'Sat.Y', 'Sat.Z']].values
         measured_pseudorange = df_gps_time_sorted['Pseudo-Range'].values
-        x0 = np.array([0, 0, 0])  # Initial guess for position
-        b0 = 0  # Initial guess for bias
-        x_estimate, bias_estimate, norm_dp = least_squares(xs, measured_pseudorange, x0, b0)
+        weights = df_gps_time_sorted['CN0'].values  # Use CN0 values as weights
+        x_estimate, bias_estimate, norm_dp = weighted_least_squares(xs, measured_pseudorange, x0, b0, weights)
+        # Update previous estimates for next iteration
+        x0 = x_estimate
+        b0 = bias_estimate
         lla = convertXYZtoLLA(x_estimate)
         ################# Satellite Corruption identifier ###########################
-        if is_corrupted_position(lla[0], lla[1]):
-            # corrupted_sat_id = df_gps_time_sorted.iloc[0]['SatPRN (ID)']
-            print("Corrupted location noticed at time: " + str(time) + " continue to the next one.")
-        else:
+        if not is_corrupted_position(lla[0], lla[1]):
             data.append([time, x_estimate[0], x_estimate[1], x_estimate[2], lla[0], lla[1], lla[2]])
+
     df_ans = pd.DataFrame(data, columns=["GPS_Unique_Time", "Pos_X", "Pos_Y", "Pos_Z", "Lat", "Lon", "Alt"])
     return df_ans
-
 
 def convertXYZtoLLA(val):
     return navpy.ecef2lla(val)
@@ -354,7 +402,7 @@ def original_gnss_to_position(input_filepath):
     for index, row in existing_df.iterrows():
         gps_time = row['GPS_Unique_Time']
 
-        if -100000 < row['Alt'] < 100000:
+        if 0 < row['Alt'] < 1000:
             coords.append((row['Lon'], row['Lat'], row['Alt']))
 
             # Create a point placemark

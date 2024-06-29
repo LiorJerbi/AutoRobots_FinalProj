@@ -15,6 +15,8 @@ To run this project, you need:
 - navpy
 - gnssutils
 - simplekml
+- georinex
+- unlzw3
 
 You can install the dependencies using pip:
 
@@ -23,11 +25,11 @@ pip install pandas numpy matplotlib navpy gnssutils simplekml georinex unlzw3
 ```
 
 ## Usage
-- 1. Clone this repository:
+1. Clone this repository:
 ```bash
 git clone https://github.com/LiorJerbi/AutoRobots_Ex1
 ```
-- 2. Navigate to the project directory:
+2. Navigate to the project directory:
 ```bash
 cd AutoRobots_Ex1
 ```
@@ -49,7 +51,17 @@ Satellites with a Carrier-to-Noise Density Ratio (CN0) below 30 are filtered out
 ### 2. Ignoring GPS Disruptions
 The script identifies and ignores GPS disruptions that incorrectly position the receiver in Beirut or Cairo. This ensures that corrupted data does not affect the final results.
 
-### 3. Live GPS Positioning Using ADB
+### 3. Weighted Least Squares Algorithm
+The GNSS positioning algorithm has been enhanced with a Weighted Least Squares (WLS) approach, which offers significant improvements over the traditional Least Squares (LS) method. Unlike LS, WLS considers the uncertainties (weights) associated with each pseudorange measurement, thereby improving accuracy and robustness in satellite positioning.
+
+#### Key Enhancements:
+- **Weighted Optimization:** Incorporates CN0 values as weights to prioritize more reliable satellite signals, enhancing the accuracy of position estimates.
+- **Bias Estimation:** Estimates and adjusts biases (`b0`) associated with pseudorange measurements, further refining positioning accuracy.
+- **Iterative Refinement:** The output from WLS can be used iteratively to initialize subsequent runs, allowing for continuous improvement in positioning accuracy across multiple iterations.
+
+This approach ensures more accurate and reliable GNSS positioning, suitable for various environmental conditions and satellite signal strengths.
+
+### 4. Live GPS Positioning Using ADB
 The project supports sort of live GPS positioning by connecting your phone to your computer using ADB. To enable this feature, follow these steps:
 
 #### Setup Instructions
