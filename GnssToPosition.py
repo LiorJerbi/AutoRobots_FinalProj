@@ -18,6 +18,10 @@ ephemeris_data_directory = os.path.join('data')
 gnss_log_samples_dir = 'gnss_log_samples'
 outcomes_dir = 'outcomes'
 
+# Create folders if they don't exist
+os.makedirs(gnss_log_samples_dir, exist_ok=True)
+os.makedirs(outcomes_dir, exist_ok=True)
+
 # Constants for corruption check
 BEIRUT_LAT = 33.82
 BEIRUT_LON = 35.49
@@ -416,7 +420,7 @@ def original_gnss_to_position(input_filepath):
     linestring = kml.newlinestring(name="Path", description="GPS Path")
     linestring.coords = coords
     linestring.altitudemode = simplekml.AltitudeMode.relativetoground  # Adjust altitude mode as needed
-    # Set style for the LineString (optional)
+
     linestring.style.linestyle.color = simplekml.Color.red  # Change color to red
     linestring.style.linestyle.width = 3  # Change width if needed
 
