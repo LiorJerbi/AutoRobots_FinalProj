@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project provides a solution for processing GNSS (Global Navigation Satellite System) raw measurements. It includes functionalities to parse raw measurement log files, compute positioning using a naive algorithm, and generate visualization outputs in KML format.
+This project provides a solution for processing GNSS (Global Navigation Satellite System) raw measurements. It includes functionalities to parse raw measurement log files, compute positioning using a naive algorithm, and generate visualization outputs in KML format. The project has been enhanced with several improvements for better accuracy and usability.
 
 ## Requirements
 
@@ -34,30 +34,66 @@ cd AutoRobots_Ex1
 
 ## How to run
 ```bash
-put your gnss raw measurments txt files in the main folder(AutoRobots_Ex1)
+put your gnss raw measurments txt files in the folder `gnss_log_samples`
 ```
-- open the "GnssToPosition.py" file and change the input file at the beginning of the code
-```bash
-###################################################################################
-################################ CHANGE FILE NAME #################################
 
-input_filepath = os.path.join('gnss_log_2024_04_13_19_51_17.txt')
-
-################################ CHANGE FILE NAME #################################
-###################################################################################
-```
 - run cmd in the main folder and write the next code:
 ```bash
 python GnssToPosition.py
 ```
 
+## Improvements and Add-ons
+### 1. Filtering Low-Quality Satellites
+Satellites with a Carrier-to-Noise Density Ratio (CN0) below 30 are filtered out to improve the accuracy of the positioning data.
+
+### 2. Ignoring GPS Disruptions
+The script identifies and ignores GPS disruptions that incorrectly position the receiver in Beirut or Cairo. This ensures that corrupted data does not affect the final results.
+
+### 3. Live GPS Positioning Using ADB
+The project supports sort of live GPS positioning by connecting your phone to your computer using ADB. To enable this feature, follow these steps:
+
+#### Setup Instructions
+1. #### Download and Install ADB:
+- Download the ADB tools from the [Android Developer website](https://developer.android.com/studio/releases/platform-tools).
+- Extract the tools to a known directory (e.g., C:/Users/User/Documents/adb).
+
+2. #### Enable Developer Options and USB Debugging on Your Phone:
+- Go to `Settings` > `About Phone` and tap `Build Number` seven times to enable Developer Options.
+- Go to `Settings` > `Developer Options` and enable `USB Debugging`.
+
+3. #### Connect Your Phone to Your Computer:
+Connect your phone to your computer using a USB cable or ensure both devices are on the same Wi-Fi network to use ADB wirelessly.
+
+4. #### Set Up Wireless ADB:
+- Run the following command to enable ADB over TCP/IP:
+```bash
+adb tcpip 5555
+```
+- Disconnect the USB cable and connect to your phone's IP address:
+```bash
+adb connect <your_phone_ip>:5555
+```
+
+#### Running the Live Positioning Script
+1. #### Find the Latest GNSS Log:
+- The script automatically identifies the latest GNSS log file on your phone's /sdcard/Download directory.
+2. #### Pull the Latest GNSS Data:
+The script pulls the latest GNSS data from your phone to the local gnss_log_samples directory.
+3. #### Run the Positioning Algorithm:
+Execute the main script and chose option 2 to process the live GNSS data.
+
 ## Output
-The script generates the following outputs:
-1. GnssToRoute.kml: KML file containing the computed path with timestamps for each position.
-2. GNSStoPosition.csv: CSV file with the computed positions and additional columns (Pos.X, Pos.Y, Pos.Z, Lat, Lon, Alt).
+The script generates the following outputs and saves them into `outcomes` folder:
+1. `"filename"`.kml: KML file containing the computed path with timestamps for each position.
+2. `"filename"`.csv: CSV file with the computed positions and additional columns (Pos.X, Pos.Y, Pos.Z, Lat, Lon, Alt).
+- `"filename"` is switched with the original gnss_log file you run your code with.
+
+## Known Issues
+- The live positioning feature may experience delays due to network latency when using wireless ADB.
+- Some GNSS log files may contain corrupted data that is not yet filtered by the script.
 
 ## Contributors
-- Yael Rosen - 209498211
-- Tomer Klugman - 312723612
-- Hadas Evers - 206398984
-- Lior Jerbi - 314899493
+- [Lior Jerbi](https://github.com/LiorJerbi) - 314899493
+- [Yael Rosen](https://github.com/yaelrosen77) - 209498211
+- [Tomer Klugman](https://github.com/tomerklugman) - 312723612
+- [Hadas Evers](https://github.com/hadasevers) - 206398984

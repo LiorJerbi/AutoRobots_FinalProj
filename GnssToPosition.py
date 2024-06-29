@@ -8,13 +8,15 @@ import simplekml
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
 import subprocess
-import webbrowser
-import re
+
 
 
 
 LIGHTSPEED = 2.99792458e8
 ephemeris_data_directory = os.path.join('data')
+# Define the folder structure
+gnss_log_samples_dir = 'gnss_log_samples'
+outcomes_dir = 'outcomes'
 
 # Constants for corruption check
 BEIRUT_LAT = 33.82
@@ -23,13 +25,6 @@ CAIRO_LAT = [30.71, 30.08]
 CAIRO_LON = [31.35, 31.78]
 
 
-###################################################################################
-################################ CHANGE FILE NAME #################################
-
-# input_filepath = os.path.join('gnss_log_2024_06_26_21_08_40.txt')
-
-################################ CHANGE FILE NAME #################################
-###################################################################################
 def find_latest_gnss_log():
     try:
         # Resetting the ADB command to find the latest file in /sdcard/Download directory
@@ -53,7 +48,7 @@ def pull_latest_gnss_data():
     latest_file = find_latest_gnss_log()
 
     if latest_file:
-        local_file_path = "gnss_data.txt"  # Path to the local file
+        local_file_path = os.path.join(gnss_log_samples_dir, "gnss_data.txt")  # Path to the local file
 
         try:
             # ADB command to pull the file
@@ -314,9 +309,9 @@ def ParseToCSV(input_filepath):
             row = [gpsTime[i], satPRN[i], Xco[i], Yco[i], Zco[i], pseudo_range[i], CN0[i]]
             data.append(row)
 
-    file_path = os.path.join(filename + '.csv')
+    output_csv_filepath = os.path.join(outcomes_dir, f"{filename}.csv")
     # Write data to CSV file
-    with open(file_path, 'w', newline='') as csvfile:
+    with open(output_csv_filepath, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
 
         # Write the header
@@ -330,7 +325,8 @@ def ParseToCSV(input_filepath):
 def original_gnss_to_position(input_filepath):
     ParseToCSV(input_filepath)
     filename = os.path.splitext(os.path.basename(input_filepath))[0]
-    input_fpath = filename + '.csv'
+
+    input_fpath = os.path.join(outcomes_dir, filename + '.csv')
 
 
     # Open the CSV file
@@ -377,10 +373,10 @@ def original_gnss_to_position(input_filepath):
     linestring.style.linestyle.width = 3  # Change width if needed
 
     # Specify the path for saving the KML file
-    output_path = os.path.join(filename + '.kml')
-
+    # output_path = os.path.join(filename + '.kml')
+    output_kml_filepath = os.path.join(outcomes_dir,filename + '.kml')
     # Save the KML file
-    kml.save(output_path)
+    kml.save(output_kml_filepath)
 
 
 def main():
@@ -395,7 +391,7 @@ def main():
             root.attributes('-topmost', True)
 
             # Show an "Open" dialog box and return the path to the selected file
-            input_filepath = askopenfilename(title="Select GNSS Log File", filetypes=[("Txt files", "*.txt")])
+            input_filepath = askopenfilename(title="Select GNSS Log File", initialdir=gnss_log_samples_dir, filetypes=[("Txt files", "*.txt")])
             root.destroy()
             if not input_filepath:
                 print("No file selected. Exiting...")
