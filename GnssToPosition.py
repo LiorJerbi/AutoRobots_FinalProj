@@ -452,7 +452,7 @@ def main():
             original_gnss_to_position(input_filepath)
         elif choice == '2':
             pull_latest_gnss_data()
-            original_gnss_to_position("gnss_data.txt")
+            original_gnss_to_position("gnss_log_samples/gnss_data.txt")
         else:
             print("Invalid choice. Exiting.")
 
