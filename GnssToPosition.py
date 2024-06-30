@@ -215,7 +215,7 @@ def ParseToCSV(input_filepath):
     # Convert columns to numeric representation
 
     # Filter by C/N0 (Carrier-to-Noise Density Ratio)
-    min_cn0_threshold = 30  # Example threshold
+    min_cn0_threshold = 30  # CN0 threshold
     measurements['Cn0DbHz'] = pd.to_numeric(measurements['Cn0DbHz'])  # Ensure Cn0DbHz column is numeric
     measurements = measurements[measurements['Cn0DbHz'] >= min_cn0_threshold]
 
@@ -389,7 +389,8 @@ def original_gnss_to_position(input_filepath):
     if positional_df['Lat'].empty or positional_df['Lon'].empty:
         print("All the satellites are corrupted, deleting csv file.")
         csvfile.close()
-        os.remove("GNSStoPosition.csv")
+        os.remove(input_fpath)
+        return
     else:
         print("Positional Algo succeeded, creating CSV and KML files.")
     existing_df = pd.read_csv(input_fpath)
@@ -399,11 +400,13 @@ def original_gnss_to_position(input_filepath):
     # Create a KML object
     kml = simplekml.Kml()
 
+    df_filtered = moving_average_filter(existing_df)
+
     # Accumulate coordinates for the LineString
     coords = []
 
     # Iterate over the data
-    for index, row in existing_df.iterrows():
+    for index, row in df_filtered.iterrows():
         gps_time = row['GPS_Unique_Time']
 
         if 0 < row['Alt'] < 1000:
@@ -414,7 +417,8 @@ def original_gnss_to_position(input_filepath):
 
             # Add time information to the placemark
             gps_times = pd.to_datetime(gps_time)
-            pnt.timestamp.when = gps_times.strftime('%Y-%m-%dT%H:%M:%SZ')
+            if not pd.isna(gps_times):
+                pnt.timestamp.when = gps_times.strftime('%Y-%m-%dT%H:%M:%SZ')
 
     # Create a LineString for the path
     linestring = kml.newlinestring(name="Path", description="GPS Path")
@@ -429,6 +433,17 @@ def original_gnss_to_position(input_filepath):
     output_kml_filepath = os.path.join(outcomes_dir,filename + '.kml')
     # Save the KML file
     kml.save(output_kml_filepath)
+
+
+# Added for mor accuracy creating the kml.
+def moving_average_filter(df, window_size=5):
+    df['Pos_X'] = df['Pos_X'].rolling(window=window_size, min_periods=1).mean()
+    df['Pos_Y'] = df['Pos_Y'].rolling(window=window_size, min_periods=1).mean()
+    df['Pos_Z'] = df['Pos_Z'].rolling(window=window_size, min_periods=1).mean()
+    df['Lat'] = df['Lat'].rolling(window=window_size, min_periods=1).mean()
+    df['Lon'] = df['Lon'].rolling(window=window_size, min_periods=1).mean()
+    df['Alt'] = df['Alt'].rolling(window=window_size, min_periods=1).mean()
+    return df
 
 
 def main():
