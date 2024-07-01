@@ -74,7 +74,7 @@ The project supports sort of live GPS positioning by connecting your phone to yo
 - Go to `Settings` > `Developer Options` and enable `USB Debugging`.
 
 3. #### Connect Your Phone to Your Computer:
-Connect your phone to your computer using a USB cable or ensure both devices are on the same Wi-Fi network to use ADB wirelessly.
+Connect your phone to your computer using a USB cable are ensure both devices are on the same Wi-Fi network to use ADB wirelessly.
 
 4. #### Set Up Wireless ADB:
 - Run the following command to enable ADB over TCP/IP:
