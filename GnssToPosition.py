@@ -272,13 +272,19 @@ def ParseToCSV(input_filepath):
         while num_sats < 5:
             one_epoch = measurements.loc[
                 (measurements['Epoch'] == epoch) & (measurements['prSeconds'] < 0.1)].drop_duplicates(subset='SvName')
+
+            if len(one_epoch) < 2:  # Check if there are at least 2 rows
+                epoch += 1
+                continue
+
             timestamp = one_epoch.iloc[1]['UnixTime'].to_pydatetime(warn=False)
             one_epoch.set_index('SvName', inplace=True)
             num_sats = len(one_epoch.index)
             epoch += 1
 
-        sats = one_epoch.index.unique().tolist()
-        ephemeris = manager.get_ephemeris(timestamp, sats)
+        if len(one_epoch) >= 2:  # Ensure one_epoch is valid before proceeding
+            sats = one_epoch.index.unique().tolist()
+            ephemeris = manager.get_ephemeris(timestamp, sats)
 
         def calculate_satellite_position(ephemeris, transmit_time):
             mu = 3.986005e14
@@ -342,19 +348,26 @@ def ParseToCSV(input_filepath):
         Xco = sv_position['x_k'].tolist()
         Zco = sv_position['z_k'].tolist()
 
-
-       # Calculate CN0 values
+        # Calculate CN0 values
         epoch = i
         num_sats = 0
         while num_sats < 5:
-            one_epoch = measurements.loc[(measurements['Epoch'] == epoch) & (measurements['prSeconds'] < 0.1)].drop_duplicates(subset='SvName')
+            one_epoch = measurements.loc[
+                (measurements['Epoch'] == epoch) & (measurements['prSeconds'] < 0.1)].drop_duplicates(subset='SvName')
+
+            # Check if one_epoch is empty
+            if one_epoch.empty:
+                epoch += 1
+                continue
+
             timestamp = one_epoch.iloc[0]['UnixTime'].to_pydatetime(warn=False)
             one_epoch.set_index('SvName', inplace=True)
             num_sats = len(one_epoch.index)
             epoch += 1
 
         CN0 = one_epoch['Cn0DbHz'].tolist()
-        pseudo_range = (one_epoch['PrM'] + LIGHTSPEED*sv_position['delT_sv']).to_numpy()
+        pseudo_range = (one_epoch['PrM'] + LIGHTSPEED * sv_position['delT_sv']).to_numpy()
+
     # saving all the above data into csv file
         for i in range(len(Yco)):
             gpsTime[i] = timestamp
@@ -410,6 +423,7 @@ def original_gnss_to_position(input_filepath):
         gps_time = row['GPS_Unique_Time']
 
         if 0 < row['Alt'] < 1000:
+
             coords.append((row['Lon'], row['Lat'], row['Alt']))
 
             # Create a point placemark
@@ -417,6 +431,8 @@ def original_gnss_to_position(input_filepath):
 
             # Add time information to the placemark
             gps_times = pd.to_datetime(gps_time)
+            # Debug print to check the altitude before filtering
+            # print(f"Processing row {index}: Alt={row['Alt']} GPSTime:{gps_time}")
             if not pd.isna(gps_times):
                 pnt.timestamp.when = gps_times.strftime('%Y-%m-%dT%H:%M:%SZ')
 
@@ -437,12 +453,24 @@ def original_gnss_to_position(input_filepath):
 
 # Added for mor accuracy creating the kml.
 def moving_average_filter(df, window_size=5):
+    # Ensure that Alt values are non-negative before applying the filter
+    # df = df[df['Alt'] >= 0].copy()
+
     df['Pos_X'] = df['Pos_X'].rolling(window=window_size, min_periods=1).mean()
     df['Pos_Y'] = df['Pos_Y'].rolling(window=window_size, min_periods=1).mean()
     df['Pos_Z'] = df['Pos_Z'].rolling(window=window_size, min_periods=1).mean()
     df['Lat'] = df['Lat'].rolling(window=window_size, min_periods=1).mean()
     df['Lon'] = df['Lon'].rolling(window=window_size, min_periods=1).mean()
     df['Alt'] = df['Alt'].rolling(window=window_size, min_periods=1).mean()
+
+    rolling_avg_alt = df['Alt'].rolling(window=window_size, min_periods=1).mean()
+
+    # Calculate the absolute difference from rolling average
+    diff_from_avg = np.abs(df['Alt'] - rolling_avg_alt)
+
+    # Replace values in 'Alt' column with -100000 where difference is large
+    df.loc[diff_from_avg > 30, 'Alt'] = -100000
+
     return df
 
 
