@@ -469,7 +469,7 @@ def moving_average_filter(df, window_size=5):
     diff_from_avg = np.abs(df['Alt'] - rolling_avg_alt)
 
     # Replace values in 'Alt' column with -100000 where difference is large
-    df.loc[diff_from_avg > 30, 'Alt'] = -100000
+    df.loc[diff_from_avg > 50, 'Alt'] = -100000
 
     return df
 
